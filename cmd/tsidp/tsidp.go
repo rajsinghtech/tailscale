@@ -39,17 +39,23 @@ import (
 	"tailscale.com/client/local"
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/envknob"
+	"tailscale.com/hostinfo"
 	"tailscale.com/ipn"
 	"tailscale.com/ipn/ipnstate"
+	"tailscale.com/ipn/store"
+	_ "tailscale.com/ipn/store/kubestore"
+	"tailscale.com/kube/kubeclient"
 	"tailscale.com/tailcfg"
 	"tailscale.com/tsnet"
 	"tailscale.com/types/key"
 	"tailscale.com/types/lazy"
 	"tailscale.com/types/views"
 	"tailscale.com/util/mak"
+	"tailscale.com/util/multierr"
 	"tailscale.com/util/must"
 	"tailscale.com/util/rands"
 	"tailscale.com/version"
+	// "github.com/pkg/errors" // Ensure this is removed if not used for specific features
 )
 
 // ctxConn is a key to look up a net.Conn stored in an HTTP request's context.
@@ -67,10 +73,12 @@ var (
 	flagFunnel             = flag.Bool("funnel", false, "use Tailscale Funnel to make tsidp available on the public internet")
 	flagHostname           = flag.String("hostname", "idp", "tsnet hostname to use instead of idp")
 	flagDir                = flag.String("dir", "", "tsnet state directory; a default one will be created if not provided")
+	flagState              = flag.String("state", os.Getenv("TS_STATE"), "path to tailscale state file or 'kube:<secret-name>' to use Kubernetes secret; if unset, 'dir' is used")
 )
 
 func main() {
 	flag.Parse()
+	hostinfo.SetApp("tsidp")
 	ctx := context.Background()
 	if !envknob.UseWIPCode() {
 		log.Fatal("cmd/tsidp is a work in progress and has not been security reviewed;\nits use requires TAILSCALE_USE_WIP_CODE=1 be set in the environment for now.")
@@ -123,11 +131,36 @@ func main() {
 	} else {
 		ts := &tsnet.Server{
 			Hostname: *flagHostname,
-			Dir:      *flagDir,
 		}
 		if *flagVerbose {
 			ts.Logf = log.Printf
 		}
+
+		if *flagState != "" {
+			if isKubeStatePath(*flagState) {
+				if err := validateKubePermissions(*flagState); err != nil {
+					log.Fatalf("tsidp: state is set to be stored in a Kubernetes Secret, but kube permissions validation for the Secret failed: %v", err)
+				}
+			}
+			s, err := store.New(ts.Logf, *flagState)
+			if err != nil {
+				log.Fatalf("Failed to create state store: %v", err)
+			}
+			ts.Store = s
+			// tsrecorder sets Dir for temporary files even with a custom store.
+			// If flagDir is not set, use a default for temp files.
+			if *flagDir == "" {
+				// TODO(maisem): use a better default temp dir?
+				// os.MkdirTemp might be an option but requires cleanup.
+				// For now, let tsnet handle its default if Dir is empty.
+			} else {
+				ts.Dir = *flagDir
+			}
+		} else if *flagDir != "" {
+			ts.Dir = *flagDir
+		}
+		// If neither -state nor -dir is provided, tsnet will use its default directory.
+
 		st, err = ts.Up(ctx)
 		if err != nil {
 			log.Fatal(err)
@@ -1242,4 +1275,81 @@ func isFunnelRequest(r *http.Request) bool {
 		return true
 	}
 	return false
+}
+
+// isKubeStatePath evaluates whether the provided state path indicates that
+// tailscaled state should be stored in a Kubernetes Secret.
+func isKubeStatePath(statePath string) bool {
+	return strings.HasPrefix(statePath, "kube:")
+}
+
+// validateKubePermissions validates that a tsidp instance has the right
+// permissions to modify its state Secret.
+// It needs to have permissions to get, update and patch the Secret.
+// If the Secret does not already exist, it also needs to have permissions to create it.
+func validateKubePermissions(state string) error {
+	secretName, ok := strings.CutPrefix(state, "kube:")
+	if !ok || secretName == "" {
+		return fmt.Errorf("unable to retrieve valid Kubernetes Secret name from %q", state)
+	}
+
+	kc, err := kubeclient.New("tailscale-tsidp")
+	if err != nil {
+		return fmt.Errorf("error initializing kube client: %w", err)
+	}
+
+	// Our kube client connects to kube API server via the kubernetes
+	// Service in the default namespace, which is not the default client-go
+	// etc behaviour and causes issues to some users. The client defaults
+	// probably cannot be changed for backwards compatibility reasons, but
+	// we can do the right thing here at the same time as adding support for
+	// tsidp to be deployed to kube.
+	url, err := kubeAPIServerAddress()
+	if err != nil {
+		return fmt.Errorf("error initiating kube client: %w", err)
+	}
+	kc.SetURL(url)
+
+	// CheckSecretPermissions returns an error if the permissions to get or
+	// update the Secret are missing. We also require that patch permission
+	// is present and, if the Secret does not exist, create permission.
+	canPatch, canCreate, err := kc.CheckSecretPermissions(context.Background(), secretName)
+	if err != nil {
+		return fmt.Errorf("error checking permissions for Secret %q: %w", secretName, err)
+	}
+	_, err = kc.GetSecret(context.Background(), secretName)
+	if err != nil && kubeclient.IsNotFoundErr(err) && !canCreate {
+		return fmt.Errorf("kube state Secret %s does not exist and we do not have permissions to create it, ensure that the right RBAC has been applied", secretName)
+	} else if err != nil && !kubeclient.IsNotFoundErr(err) {
+		return fmt.Errorf("error attempting to get kube state Secret %q: %w", secretName, err)
+	}
+	// tailscaled state updates are written to the state Secret by patch
+	// operations, so we must have permissions to patch it.
+	if !canPatch {
+		return fmt.Errorf("we do not have the required permissions to patch the state Secret %q, ensure that the right RBAC has been applied", secretName)
+	}
+	return nil
+}
+
+// kubeAPIServerAddress determines the address of the kube API server. It uses
+// the standard environment variables set by kube that are expected to be found
+// on any Pod- this is the same logic as used by client-go.
+// https://github.com/kubernetes/client-go/blob/v0.29.5/rest/config.go#L516-L536
+func kubeAPIServerAddress() (_ string, err error) {
+	host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
+	if host == "" {
+		err = errors.New("[unexpected] tsidp seems to be running in a Kubernetes environment with KUBERNETES_SERVICE_HOST unset")
+	}
+	if port == "" {
+		newErr := errors.New("[unexpected] tsidp appears to be running in a Kubernetes environment with KUBERNETES_SERVICE_PORT unset")
+		if err != nil {
+			err = multierr.New(err, newErr) // Corrected usage for tailscale.com/util/multierr
+		} else {
+			err = newErr
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	return "https://" + net.JoinHostPort(host, port), nil
 }
