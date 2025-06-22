@@ -1,0 +1,39 @@
+apiVersion: tailscale.rajsinghtech.com/v1alpha1
+kind: TailscaleGateway
+metadata:
+  name: tailscale-gateway-sample
+spec:
+  # Reference to the Tailscale auth key secret
+  authKey:
+    name: tailscale-auth-key
+    namespace: tailscale-gateway-system
+    key: authkey
+  
+  # Reference to the EnvoyGateway instance
+  envoyGatewayRef:
+    name: eg
+    namespace: envoy-gateway-system
+  
+  # GatewayClass name to manage
+  gatewayClassName: tailscale-class
+  
+  # xDS server configuration
+  xdsServerConfig:
+    namespace: tailscale-gateway-system
+    replicas: 2
+    image: rajsinghtech/tailscale-gateway:latest
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  
+  # Tailscale-specific configuration
+  tailscaleConfig:
+    acceptDNS: true
+    acceptRoutes: true
+    advertiseRoutes:
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"

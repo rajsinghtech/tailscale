@@ -1,0 +1,47 @@
+apiVersion: tailscale.rajsinghtech.com/v1alpha1
+kind: TailscaleProxy
+metadata:
+  name: egress-proxy-sample
+  namespace: default
+spec:
+  # Type of proxy - egress for accessing tailnet services from cluster
+  type: egress
+  
+  # Number of replicas for HA and load balancing
+  replicas: 3
+  
+  # Reference to the TailscaleGateway class
+  className: tailscale-gateway-sample
+  
+  # Egress configuration
+  egressConfig:
+    # Services to access from the tailnet
+    services:
+    # Database service on tailnet
+    - name: postgres-db
+      tailscaleTarget: postgres.tail1234.ts.net
+      port: 5432
+      protocol: tcp
+    
+    # Internal API on tailnet
+    - name: internal-api
+      tailscaleTarget: api-server.tail1234.ts.net
+      port: 8080
+      protocol: tcp
+    
+    # File server on tailnet
+    - name: file-server
+      tailscaleTarget: files.tail1234.ts.net
+      port: 445
+      protocol: tcp
+    
+    # DNS server on tailnet (UDP example)
+    - name: dns-server
+      tailscaleTarget: 100.64.0.53
+      port: 53
+      protocol: udp
+  
+  # ACL tags for the Tailscale node
+  tags:
+  - tag:k8s-egress
+  - tag:cluster-access

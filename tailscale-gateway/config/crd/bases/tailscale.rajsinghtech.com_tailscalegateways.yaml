@@ -1,0 +1,184 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tailscalegateways.tailscale.rajsinghtech.com
+spec:
+  group: tailscale.rajsinghtech.com
+  names:
+    kind: TailscaleGateway
+    listKind: TailscaleGatewayList
+    plural: tailscalegateways
+    shortNames:
+    - tsg
+    singular: tailscalegateway
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
+    - jsonPath: .status.xdsServerEndpoint
+      name: xDS Server
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: TailscaleGateway is the Schema for the tailscalegateways API
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TailscaleGatewaySpec defines the desired state of TailscaleGateway
+            properties:
+              authKey:
+                description: AuthKey is a reference to a secret containing the Tailscale auth key
+                properties:
+                  key:
+                    description: Key is the key in the secret
+                    type: string
+                  name:
+                    description: Name is the name of the secret
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the secret
+                    type: string
+                required:
+                - key
+                - name
+                - namespace
+                type: object
+              envoyGatewayRef:
+                description: EnvoyGatewayRef is a reference to the EnvoyGateway to integrate with
+                properties:
+                  name:
+                    description: Name is the name of the EnvoyGateway
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the EnvoyGateway
+                    type: string
+                required:
+                - name
+                type: object
+              gatewayClassName:
+                description: GatewayClassName is the name of the GatewayClass to manage
+                type: string
+              tailscaleConfig:
+                description: TailscaleConfig contains Tailscale-specific configuration
+                properties:
+                  acceptDNS:
+                    default: true
+                    description: AcceptDNS whether to accept DNS configuration from the tailnet
+                    type: boolean
+                  acceptRoutes:
+                    default: true
+                    description: AcceptRoutes whether to accept routes advertised by other nodes
+                    type: boolean
+                  advertiseRoutes:
+                    description: AdvertiseRoutes are the routes to advertise to the tailnet
+                    items:
+                      type: string
+                    type: array
+                  advertiseExitNode:
+                    description: AdvertiseExitNode whether to advertise as an exit node
+                    type: boolean
+                  exitNodeSelector:
+                    description: ExitNodeSelector is the selector for the exit node
+                    properties:
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                type: object
+              xdsServerConfig:
+                description: XDSServerConfig configures the xDS extension server
+                properties:
+                  image:
+                    default: rajsinghtech/tailscale-gateway:latest
+                    description: Image is the container image for the xDS server
+                    type: string
+                  namespace:
+                    default: tailscale-gateway-system
+                    description: Namespace is where to deploy the xDS server
+                    type: string
+                  replicas:
+                    default: 2
+                    description: Replicas is the number of xDS server instances
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  resources:
+                    description: Resources are the compute resources for the xDS server
+                    properties:
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        type: object
+                    type: object
+                type: object
+            required:
+            - authKey
+            - envoyGatewayRef
+            - gatewayClassName
+            type: object
+          status:
+            description: TailscaleGatewayStatus defines the observed state of TailscaleGateway
+            properties:
+              conditions:
+                description: Conditions describe the current state of the TailscaleGateway
+                items:
+                  description: Condition contains details for one aspect of the current state
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              ready:
+                description: Ready indicates if the TailscaleGateway is ready
+                type: boolean
+              xdsServerEndpoint:
+                description: XDSServerEndpoint is the endpoint of the xDS server
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

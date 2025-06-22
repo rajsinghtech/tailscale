@@ -1,0 +1,78 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+testbin/*
+Dockerfile.cross
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Go workspace file
+go.work
+
+# Kubernetes Generated files - skip generated files, except for vendored files
+!vendor/**/zz_generated.*
+
+# editor and IDE paraphernalia
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary build files
+build/_output/
+build/_test/
+
+# Local environment files
+.env
+.env.local
+
+# Vendor directory (if not using go modules vendoring)
+vendor/
+
+# Kubebuilder / controller-tools
+# Don't ignore CRD files since we manage them manually
+# /config/crd/bases/*.yaml
+# /config/rbac/role.yaml
+/config/webhook/manifests.yaml
+
+# Test artifacts
+cover.out
+*.coverprofile
+
+# Dependency directories
+/bin
+/hack/bin
+
+# Local kustomize overlays
+/config/local/
+
+# Tilt files
+Tiltfile
+tilt_modules/
+
+# Local development
+*.local.yaml
+*-local.yaml
+
+# Certificates
+*.pem
+*.key
+*.crt

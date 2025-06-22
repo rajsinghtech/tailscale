@@ -1,0 +1,696 @@
+# This is a combined manifest for easy deployment of the Tailscale-Envoy Gateway operator
+# It includes all necessary CRDs, RBAC, and deployment resources
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tailscale-gateway-system
+---
+# CRDs
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tailscalegateways.tailscale.rajsinghtech.com
+spec:
+  group: tailscale.rajsinghtech.com
+  names:
+    kind: TailscaleGateway
+    listKind: TailscaleGatewayList
+    plural: tailscalegateways
+    shortNames:
+    - tsg
+    singular: tailscalegateway
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
+    - jsonPath: .status.xdsServerEndpoint
+      name: xDS Server
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: TailscaleGateway is the Schema for the tailscalegateways API
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TailscaleGatewaySpec defines the desired state of TailscaleGateway
+            properties:
+              authKey:
+                description: AuthKey is a reference to a secret containing the Tailscale auth key
+                properties:
+                  key:
+                    description: Key is the key in the secret
+                    type: string
+                  name:
+                    description: Name is the name of the secret
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the secret
+                    type: string
+                required:
+                - key
+                - name
+                - namespace
+                type: object
+              envoyGatewayRef:
+                description: EnvoyGatewayRef is a reference to the EnvoyGateway to integrate with
+                properties:
+                  name:
+                    description: Name is the name of the EnvoyGateway
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the EnvoyGateway
+                    type: string
+                required:
+                - name
+                type: object
+              gatewayClassName:
+                description: GatewayClassName is the name of the GatewayClass to manage
+                type: string
+              tailscaleConfig:
+                description: TailscaleConfig contains Tailscale-specific configuration
+                properties:
+                  acceptDNS:
+                    default: true
+                    description: AcceptDNS whether to accept DNS configuration from the tailnet
+                    type: boolean
+                  acceptRoutes:
+                    default: true
+                    description: AcceptRoutes whether to accept routes advertised by other nodes
+                    type: boolean
+                  advertiseRoutes:
+                    description: AdvertiseRoutes are the routes to advertise to the tailnet
+                    items:
+                      type: string
+                    type: array
+                  advertiseExitNode:
+                    description: AdvertiseExitNode whether to advertise as an exit node
+                    type: boolean
+                  exitNodeSelector:
+                    description: ExitNodeSelector is the selector for the exit node
+                    properties:
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                type: object
+              xdsServerConfig:
+                description: XDSServerConfig configures the xDS extension server
+                properties:
+                  image:
+                    default: rajsinghtech/tailscale-gateway:latest
+                    description: Image is the container image for the xDS server
+                    type: string
+                  namespace:
+                    default: tailscale-gateway-system
+                    description: Namespace is where to deploy the xDS server
+                    type: string
+                  replicas:
+                    default: 2
+                    description: Replicas is the number of xDS server instances
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  resources:
+                    description: Resources are the compute resources for the xDS server
+                    properties:
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        type: object
+                    type: object
+                type: object
+            required:
+            - authKey
+            - envoyGatewayRef
+            - gatewayClassName
+            type: object
+          status:
+            description: TailscaleGatewayStatus defines the observed state of TailscaleGateway
+            properties:
+              conditions:
+                description: Conditions describe the current state of the TailscaleGateway
+                items:
+                  description: Condition contains details for one aspect of the current state
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              ready:
+                description: Ready indicates if the TailscaleGateway is ready
+                type: boolean
+              xdsServerEndpoint:
+                description: XDSServerEndpoint is the endpoint of the xDS server
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tailscaleproxies.tailscale.rajsinghtech.com
+spec:
+  group: tailscale.rajsinghtech.com
+  names:
+    kind: TailscaleProxy
+    listKind: TailscaleProxyList
+    plural: tailscaleproxies
+    shortNames:
+    - tsp
+    singular: tailscaleproxy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .status.readyReplicas
+      name: Ready
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: TailscaleProxy is the Schema for the tailscaleproxies API
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TailscaleProxySpec defines the desired state of TailscaleProxy
+            properties:
+              className:
+                description: ClassName specifies which TailscaleGateway this proxy belongs to
+                type: string
+              egressConfig:
+                description: EgressConfig is required when Type is "egress"
+                properties:
+                  services:
+                    description: Services defines the Tailscale services to access from the cluster
+                    items:
+                      properties:
+                        name:
+                          description: Name is the service name to create in the cluster
+                          type: string
+                        port:
+                          description: Port is the port on the Tailscale target
+                          format: int32
+                          type: integer
+                        protocol:
+                          default: tcp
+                          description: Protocol is the protocol (tcp, udp)
+                          enum:
+                          - tcp
+                          - udp
+                          type: string
+                        tailscaleTarget:
+                          description: TailscaleTarget is the Tailscale hostname or IP to connect to
+                          type: string
+                      required:
+                      - name
+                      - port
+                      - tailscaleTarget
+                      type: object
+                    type: array
+                required:
+                - services
+                type: object
+              ingressConfig:
+                description: IngressConfig is required when Type is "ingress"
+                properties:
+                  hostname:
+                    description: Hostname is the Tailscale hostname for the ingress
+                    type: string
+                  services:
+                    description: Services defines the services to expose via Tailscale ingress
+                    items:
+                      properties:
+                        name:
+                          description: Name is the service name
+                          type: string
+                        path:
+                          description: Path is the path prefix for HTTP/HTTPS services
+                          type: string
+                        port:
+                          description: Port is the port to expose
+                          format: int32
+                          type: integer
+                        protocol:
+                          description: Protocol is the protocol (http, https, tcp)
+                          enum:
+                          - http
+                          - https
+                          - tcp
+                          type: string
+                        targetPort:
+                          description: TargetPort is the target port on the backend service
+                          format: int32
+                          type: integer
+                      required:
+                      - name
+                      - port
+                      - protocol
+                      - targetPort
+                      type: object
+                    type: array
+                  useFunnel:
+                    description: UseFunnel enables Tailscale Funnel for public access
+                    type: boolean
+                required:
+                - hostname
+                - services
+                type: object
+              replicas:
+                default: 2
+                description: Replicas is the number of proxy instances to run
+                format: int32
+                minimum: 1
+                type: integer
+              tags:
+                description: Tags are the ACL tags to apply to the Tailscale nodes
+                items:
+                  type: string
+                type: array
+              type:
+                description: Type defines whether this is an ingress or egress proxy
+                enum:
+                - ingress
+                - egress
+                type: string
+            required:
+            - className
+            - type
+            type: object
+          status:
+            description: TailscaleProxyStatus defines the observed state of TailscaleProxy
+            properties:
+              conditions:
+                description: Conditions describe the current state of the TailscaleProxy
+                items:
+                  description: Condition contains details for one aspect of the current state
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              devices:
+                description: Devices lists the Tailscale device information for the proxies
+                items:
+                  properties:
+                    hostname:
+                      description: Hostname is the Tailscale hostname
+                      type: string
+                    podName:
+                      description: PodName is the name of the pod running this device
+                      type: string
+                    tailscaleIP:
+                      description: TailscaleIP is the Tailscale IP address
+                      type: string
+                  required:
+                  - hostname
+                  - podName
+                  - tailscaleIP
+                  type: object
+                type: array
+              readyReplicas:
+                description: ReadyReplicas is the number of ready proxy instances
+                format: int32
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/name: tailscale-gateway
+    app.kubernetes.io/managed-by: kustomize
+  name: tailscale-gateway-controller-manager
+  namespace: tailscale-gateway-system
+---
+# ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tailscale-gateway-manager-role
+rules:
+# Core resources
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - endpoints
+  - events
+  - persistentvolumeclaims
+  - pods
+  - secrets
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+# Apps resources
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# Discovery resources
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# RBAC resources
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# Tailscale CRDs
+- apiGroups:
+  - tailscale.rajsinghtech.com
+  resources:
+  - tailscalegateways
+  - tailscaleproxies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tailscale.rajsinghtech.com
+  resources:
+  - tailscalegateways/finalizers
+  - tailscaleproxies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - tailscale.rajsinghtech.com
+  resources:
+  - tailscalegateways/status
+  - tailscaleproxies/status
+  verbs:
+  - get
+  - patch
+  - update
+# Gateway API resources
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - gatewayclasses
+  - gateways
+  - httproutes
+  - grpcroutes
+  - tcproutes
+  - tlsroutes
+  - udproutes
+  verbs:
+  - get
+  - list
+  - watch
+# Envoy Gateway resources
+- apiGroups:
+  - gateway.envoyproxy.io
+  resources:
+  - envoygateways
+  - envoyproxies
+  - envoyextensionpolicies
+  verbs:
+  - get
+  - list
+  - watch
+# Coordination for leader election
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - update
+---
+# Leader Election Role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/name: tailscale-gateway
+    app.kubernetes.io/managed-by: kustomize
+  name: tailscale-gateway-leader-election-role
+  namespace: tailscale-gateway-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: tailscale-gateway
+    app.kubernetes.io/managed-by: kustomize
+  name: tailscale-gateway-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tailscale-gateway-manager-role
+subjects:
+- kind: ServiceAccount
+  name: tailscale-gateway-controller-manager
+  namespace: tailscale-gateway-system
+---
+# Leader Election RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: tailscale-gateway
+    app.kubernetes.io/managed-by: kustomize
+  name: tailscale-gateway-leader-election-rolebinding
+  namespace: tailscale-gateway-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tailscale-gateway-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: tailscale-gateway-controller-manager
+  namespace: tailscale-gateway-system
+---
+# Controller Manager Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-gateway-controller-manager
+  namespace: tailscale-gateway-system
+  labels:
+    control-plane: controller-manager
+    app.kubernetes.io/name: tailscale-gateway
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        control-plane: controller-manager
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - command:
+        - /manager
+        args:
+        - --leader-elect
+        image: rajsinghtech/tailscale-gateway:latest
+        name: manager
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - "ALL"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+      serviceAccountName: tailscale-gateway-controller-manager
+      terminationGracePeriodSeconds: 10

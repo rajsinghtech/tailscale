@@ -1,0 +1,47 @@
+apiVersion: tailscale.rajsinghtech.com/v1alpha1
+kind: TailscaleProxy
+metadata:
+  name: ingress-proxy-sample
+  namespace: default
+spec:
+  # Type of proxy - ingress for exposing services to tailnet
+  type: ingress
+  
+  # Number of replicas for HA
+  replicas: 2
+  
+  # Reference to the TailscaleGateway class
+  className: tailscale-gateway-sample
+  
+  # Ingress configuration
+  ingressConfig:
+    # Tailscale hostname for this ingress
+    hostname: web-app
+    
+    # Enable Tailscale Funnel for public access (optional)
+    useFunnel: false
+    
+    # Services to expose
+    services:
+    - name: web-service
+      protocol: https
+      port: 443
+      targetPort: 8080
+      path: /
+    
+    - name: api-service
+      protocol: https
+      port: 443
+      targetPort: 8081
+      path: /api
+    
+    - name: metrics
+      protocol: http
+      port: 9090
+      targetPort: 9090
+      path: /metrics
+  
+  # ACL tags for the Tailscale node
+  tags:
+  - tag:k8s-ingress
+  - tag:web-app

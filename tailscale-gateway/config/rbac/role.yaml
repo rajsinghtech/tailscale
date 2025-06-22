@@ -1,0 +1,149 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+# Core resources
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - endpoints
+  - events
+  - persistentvolumeclaims
+  - pods
+  - secrets
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+# Apps resources
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# Discovery resources
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# RBAC resources
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# Tailscale CRDs
+- apiGroups:
+  - tailscale.rajsinghtech.com
+  resources:
+  - tailscalegateways
+  - tailscaleproxies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tailscale.rajsinghtech.com
+  resources:
+  - tailscalegateways/finalizers
+  - tailscaleproxies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - tailscale.rajsinghtech.com
+  resources:
+  - tailscalegateways/status
+  - tailscaleproxies/status
+  verbs:
+  - get
+  - patch
+  - update
+# Gateway API resources
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - gatewayclasses
+  - gateways
+  - httproutes
+  - grpcroutes
+  - tcproutes
+  - tlsroutes
+  - udproutes
+  verbs:
+  - get
+  - list
+  - watch
+# Envoy Gateway resources
+- apiGroups:
+  - gateway.envoyproxy.io
+  resources:
+  - envoygateways
+  - envoyproxies
+  - envoyextensionpolicies
+  verbs:
+  - get
+  - list
+  - watch
+# Coordination for leader election
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - update

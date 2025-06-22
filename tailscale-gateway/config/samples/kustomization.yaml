@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+## Append samples of your project ##
+resources:
+- tailscale_v1alpha1_tailscalegateway.yaml
+- tailscale_v1alpha1_tailscaleproxy_ingress.yaml
+- tailscale_v1alpha1_tailscaleproxy_egress.yaml

@@ -1,0 +1,200 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tailscaleproxies.tailscale.rajsinghtech.com
+spec:
+  group: tailscale.rajsinghtech.com
+  names:
+    kind: TailscaleProxy
+    listKind: TailscaleProxyList
+    plural: tailscaleproxies
+    shortNames:
+    - tsp
+    singular: tailscaleproxy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .status.readyReplicas
+      name: Ready
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: TailscaleProxy is the Schema for the tailscaleproxies API
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TailscaleProxySpec defines the desired state of TailscaleProxy
+            properties:
+              className:
+                description: ClassName specifies which TailscaleGateway this proxy belongs to
+                type: string
+              egressConfig:
+                description: EgressConfig is required when Type is "egress"
+                properties:
+                  services:
+                    description: Services defines the Tailscale services to access from the cluster
+                    items:
+                      properties:
+                        name:
+                          description: Name is the service name to create in the cluster
+                          type: string
+                        port:
+                          description: Port is the port on the Tailscale target
+                          format: int32
+                          type: integer
+                        protocol:
+                          default: tcp
+                          description: Protocol is the protocol (tcp, udp)
+                          enum:
+                          - tcp
+                          - udp
+                          type: string
+                        tailscaleTarget:
+                          description: TailscaleTarget is the Tailscale hostname or IP to connect to
+                          type: string
+                      required:
+                      - name
+                      - port
+                      - tailscaleTarget
+                      type: object
+                    type: array
+                required:
+                - services
+                type: object
+              ingressConfig:
+                description: IngressConfig is required when Type is "ingress"
+                properties:
+                  hostname:
+                    description: Hostname is the Tailscale hostname for the ingress
+                    type: string
+                  services:
+                    description: Services defines the services to expose via Tailscale ingress
+                    items:
+                      properties:
+                        name:
+                          description: Name is the service name
+                          type: string
+                        path:
+                          description: Path is the path prefix for HTTP/HTTPS services
+                          type: string
+                        port:
+                          description: Port is the port to expose
+                          format: int32
+                          type: integer
+                        protocol:
+                          description: Protocol is the protocol (http, https, tcp)
+                          enum:
+                          - http
+                          - https
+                          - tcp
+                          type: string
+                        targetPort:
+                          description: TargetPort is the target port on the backend service
+                          format: int32
+                          type: integer
+                      required:
+                      - name
+                      - port
+                      - protocol
+                      - targetPort
+                      type: object
+                    type: array
+                  useFunnel:
+                    description: UseFunnel enables Tailscale Funnel for public access
+                    type: boolean
+                required:
+                - hostname
+                - services
+                type: object
+              replicas:
+                default: 2
+                description: Replicas is the number of proxy instances to run
+                format: int32
+                minimum: 1
+                type: integer
+              tags:
+                description: Tags are the ACL tags to apply to the Tailscale nodes
+                items:
+                  type: string
+                type: array
+              type:
+                description: Type defines whether this is an ingress or egress proxy
+                enum:
+                - ingress
+                - egress
+                type: string
+            required:
+            - className
+            - type
+            type: object
+          status:
+            description: TailscaleProxyStatus defines the observed state of TailscaleProxy
+            properties:
+              conditions:
+                description: Conditions describe the current state of the TailscaleProxy
+                items:
+                  description: Condition contains details for one aspect of the current state
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              devices:
+                description: Devices lists the Tailscale device information for the proxies
+                items:
+                  properties:
+                    hostname:
+                      description: Hostname is the Tailscale hostname
+                      type: string
+                    podName:
+                      description: PodName is the name of the pod running this device
+                      type: string
+                    tailscaleIP:
+                      description: TailscaleIP is the Tailscale IP address
+                      type: string
+                  required:
+                  - hostname
+                  - podName
+                  - tailscaleIP
+                  type: object
+                type: array
+              readyReplicas:
+                description: ReadyReplicas is the number of ready proxy instances
+                format: int32
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
