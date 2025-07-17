@@ -1,0 +1,56 @@
+static_resources:
+  listeners:
+  - name: main_listener
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 8080
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          codec_type: AUTO
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: backend
+              domains: ["*"]
+              routes:
+              {{- range $route := .Routes }}
+              - match:
+                  {{- if $route.HostHeader }}
+                  headers:
+                  - name: ":authority"
+                    exact_match: "{{ $route.HostHeader }}"
+                  {{- end }}
+                  prefix: "{{ $route.PathPrefix }}"
+                route:
+                  cluster: {{ $route.Name }}_{{ $route.Namespace }}_cluster
+              {{- end }}
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+  {{- range $route := .Routes }}
+  - name: {{ $route.Name }}_{{ $route.Namespace }}_cluster
+    connect_timeout: 30s
+    type: STRICT_DNS
+    dns_lookup_family: V4_ONLY
+    load_assignment:
+      cluster_name: {{ $route.Name }}_{{ $route.Namespace }}_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: {{ $route.Name }}.{{ $route.Namespace }}.svc.cluster.local
+                port_value: {{ $route.Port }}
+  {{- end }}
+admin:
+  address:
+    socket_address:
+      address: 127.0.0.1
+      port_value: 9901

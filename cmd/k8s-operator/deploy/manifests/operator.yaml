@@ -2895,6 +2895,119 @@ spec:
                     spec:
                         description: Spec describes the desired ProxyGroup instances.
                         properties:
+                            envoy:
+                                description: |-
+                                    Envoy contains configuration for ProxyGroups that use Envoy as the proxy.
+                                    This field is only used when Type is set to "ingress".
+                                properties:
+                                    configSource:
+                                        default: static
+                                        description: |-
+                                            ConfigSource specifies how Envoy configuration is provided.
+                                            Valid values are "static" (default) or "xds".
+                                        enum:
+                                            - static
+                                            - xds
+                                        type: string
+                                    extraArgs:
+                                        description: ExtraArgs are additional command-line arguments to pass to Envoy.
+                                        items:
+                                            type: string
+                                        type: array
+                                    image:
+                                        description: |-
+                                            Image specifies a custom Envoy image to use.
+                                            If not specified, defaults to envoyproxy/envoy:v1.31-latest.
+                                        type: string
+                                    resources:
+                                        description: Resources defines the resource requirements for the Envoy container.
+                                        properties:
+                                            claims:
+                                                description: |-
+                                                    Claims lists the names of resources, defined in spec.resourceClaims,
+                                                    that are used by this container.
+
+                                                    This is an alpha field and requires enabling the
+                                                    DynamicResourceAllocation feature gate.
+
+                                                    This field is immutable. It can only be set for containers.
+                                                items:
+                                                    description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                                                    properties:
+                                                        name:
+                                                            description: |-
+                                                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                                                the Pod where this field is used. It makes that resource available
+                                                                inside a container.
+                                                            type: string
+                                                        request:
+                                                            description: |-
+                                                                Request is the name chosen for a request in the referenced claim.
+                                                                If empty, everything from the claim is made available, otherwise
+                                                                only the result of this request.
+                                                            type: string
+                                                    required:
+                                                        - name
+                                                    type: object
+                                                type: array
+                                                x-kubernetes-list-map-keys:
+                                                    - name
+                                                x-kubernetes-list-type: map
+                                            limits:
+                                                additionalProperties:
+                                                    anyOf:
+                                                        - type: integer
+                                                        - type: string
+                                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                    x-kubernetes-int-or-string: true
+                                                description: |-
+                                                    Limits describes the maximum amount of compute resources allowed.
+                                                    More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                type: object
+                                            requests:
+                                                additionalProperties:
+                                                    anyOf:
+                                                        - type: integer
+                                                        - type: string
+                                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                    x-kubernetes-int-or-string: true
+                                                description: |-
+                                                    Requests describes the minimum amount of compute resources required.
+                                                    If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                                    otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                                    More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                type: object
+                                        type: object
+                                    tls:
+                                        description: TLS contains TLS/HTTPS configuration for the Envoy proxy.
+                                        properties:
+                                            certSecretName:
+                                                description: |-
+                                                    CertSecretName is the name of the Secret containing TLS certificates when CertSource is "user".
+                                                    The Secret must contain "tls.crt" and "tls.key" keys.
+                                                type: string
+                                            certSource:
+                                                default: tailscale
+                                                description: |-
+                                                    CertSource specifies where TLS certificates come from.
+                                                    Valid values are "tailscale" (default) or "user".
+                                                enum:
+                                                    - tailscale
+                                                    - user
+                                                type: string
+                                            enabled:
+                                                description: Enabled determines whether HTTPS/TLS is enabled.
+                                                type: boolean
+                                            httpsRedirect:
+                                                description: HTTPSRedirect enables automatic HTTP to HTTPS redirects.
+                                                type: boolean
+                                        type: object
+                                    xdsServer:
+                                        description: |-
+                                            XDSServer specifies the address of the xDS server when ConfigSource is "xds".
+                                            This should be in the format "hostname:port".
+                                        type: string
+                                type: object
                             hostnamePrefix:
                                 description: |-
                                     HostnamePrefix is the hostname prefix to use for tailnet devices created
@@ -2904,6 +3017,22 @@ spec:
                                     must not start with a dash and must be between 1 and 62 characters long.
                                 pattern: ^[a-z0-9][a-z0-9-]{0,61}$
                                 type: string
+                            kubeAPIServer:
+                                description: |-
+                                    KubeAPIServer contains configuration specific to the kube-apiserver
+                                    ProxyGroup type. This field is only used when Type is set to "kube-apiserver".
+                                properties:
+                                    mode:
+                                        description: |-
+                                            Mode to run the API server proxy in. Supported modes are auth and noauth.
+                                            In auth mode, requests from the tailnet proxied over to the Kubernetes
+                                            API server are additionally impersonated using the sender's tailnet identity.
+                                            If not specified, defaults to auth mode.
+                                        enum:
+                                            - auth
+                                            - noauth
+                                        type: string
+                                type: object
                             proxyClass:
                                 description: |-
                                     ProxyClass is the name of the ProxyClass custom resource that contains

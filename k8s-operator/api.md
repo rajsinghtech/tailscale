@@ -21,6 +21,20 @@
 
 
 
+#### APIServerProxyMode
+
+_Underlying type:_ _string_
+
+APIServerProxyMode is the mode to run the kube-apiserver proxy in.
+
+_Validation:_
+- Enum: [auth noauth]
+
+_Appears in:_
+- [KubeAPIServerConfig](#kubeapiserverconfig)
+
+
+
 #### AppConnector
 
 
@@ -283,6 +297,46 @@ _Appears in:_
 | `value` _string_ | Variable references $(VAR_NAME) are expanded using the previously defined<br /> environment variables in the container and any service environment<br />variables. If a variable cannot be resolved, the reference in the input<br />string will be unchanged. Double $$ are reduced to a single $, which<br />allows for escaping the $(VAR_NAME) syntax: i.e. "$$(VAR_NAME)" will<br />produce the string literal "$(VAR_NAME)". Escaped references will never<br />be expanded, regardless of whether the variable exists or not. Defaults<br />to "". |  |  |
 
 
+#### EnvoyConfig
+
+
+
+EnvoyConfig contains configuration specific to Envoy-based ProxyGroups.
+
+
+
+_Appears in:_
+- [ProxyGroupSpec](#proxygroupspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `configSource` _string_ | ConfigSource specifies how Envoy configuration is provided.<br />Valid values are "static" (default) or "xds". | static | Enum: [static xds] <br /> |
+| `xdsServer` _string_ | XDSServer specifies the address of the xDS server when ConfigSource is "xds".<br />This should be in the format "hostname:port". |  |  |
+| `tls` _[EnvoyTLSConfig](#envoytlsconfig)_ | TLS contains TLS/HTTPS configuration for the Envoy proxy. |  |  |
+| `image` _string_ | Image specifies a custom Envoy image to use.<br />If not specified, defaults to envoyproxy/envoy:v1.31-latest. |  |  |
+| `extraArgs` _string array_ | ExtraArgs are additional command-line arguments to pass to Envoy. |  |  |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.3/#resourcerequirements-v1-core)_ | Resources defines the resource requirements for the Envoy container. |  |  |
+
+
+#### EnvoyTLSConfig
+
+
+
+EnvoyTLSConfig contains TLS configuration for Envoy.
+
+
+
+_Appears in:_
+- [EnvoyConfig](#envoyconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled determines whether HTTPS/TLS is enabled. |  |  |
+| `certSource` _string_ | CertSource specifies where TLS certificates come from.<br />Valid values are "tailscale" (default) or "user". | tailscale | Enum: [tailscale user] <br /> |
+| `certSecretName` _string_ | CertSecretName is the name of the Secret containing TLS certificates when CertSource is "user".<br />The Secret must contain "tls.crt" and "tls.key" keys. |  |  |
+| `httpsRedirect` _boolean_ | HTTPSRedirect enables automatic HTTP to HTTPS redirects. |  |  |
+
+
 #### Hostname
 
 _Underlying type:_ _string_
@@ -311,6 +365,22 @@ _Validation:_
 _Appears in:_
 - [ProxyGroupSpec](#proxygroupspec)
 
+
+
+#### KubeAPIServerConfig
+
+
+
+KubeAPIServerConfig contains configuration specific to the kube-apiserver ProxyGroup type.
+
+
+
+_Appears in:_
+- [ProxyGroupSpec](#proxygroupspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `mode` _[APIServerProxyMode](#apiserverproxymode)_ | Mode to run the API server proxy in. Supported modes are auth and noauth.<br />In auth mode, requests from the tailnet proxied over to the Kubernetes<br />API server are additionally impersonated using the sender's tailnet identity.<br />If not specified, defaults to auth mode. |  | Enum: [auth noauth] <br /> |
 
 
 #### LabelValue
@@ -643,6 +713,8 @@ _Appears in:_
 | `replicas` _integer_ | Replicas specifies how many replicas to create the StatefulSet with.<br />Defaults to 2. |  | Minimum: 0 <br /> |
 | `hostnamePrefix` _[HostnamePrefix](#hostnameprefix)_ | HostnamePrefix is the hostname prefix to use for tailnet devices created<br />by the ProxyGroup. Each device will have the integer number from its<br />StatefulSet pod appended to this prefix to form the full hostname.<br />HostnamePrefix can contain lower case letters, numbers and dashes, it<br />must not start with a dash and must be between 1 and 62 characters long. |  | Pattern: `^[a-z0-9][a-z0-9-]{0,61}$` <br />Type: string <br /> |
 | `proxyClass` _string_ | ProxyClass is the name of the ProxyClass custom resource that contains<br />configuration options that should be applied to the resources created<br />for this ProxyGroup. If unset, and there is no default ProxyClass<br />configured, the operator will create resources with the default<br />configuration. |  |  |
+| `kubeAPIServer` _[KubeAPIServerConfig](#kubeapiserverconfig)_ | KubeAPIServer contains configuration specific to the kube-apiserver<br />ProxyGroup type. This field is only used when Type is set to "kube-apiserver". |  |  |
+| `envoy` _[EnvoyConfig](#envoyconfig)_ | Envoy contains configuration for ProxyGroups that use Envoy as the proxy.<br />This field is only used when Type is set to "ingress". |  |  |
 
 
 #### ProxyGroupStatus

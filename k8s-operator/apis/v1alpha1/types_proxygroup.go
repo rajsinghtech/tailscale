@@ -6,6 +6,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -84,6 +85,16 @@ type ProxyGroupSpec struct {
 	// configuration.
 	// +optional
 	ProxyClass string `json:"proxyClass,omitempty"`
+
+	// KubeAPIServer contains configuration specific to the kube-apiserver
+	// ProxyGroup type. This field is only used when Type is set to "kube-apiserver".
+	// +optional
+	KubeAPIServer *KubeAPIServerConfig `json:"kubeAPIServer,omitempty"`
+
+	// Envoy contains configuration for ProxyGroups that use Envoy as the proxy.
+	// This field is only used when Type is set to "ingress".
+	// +optional
+	Envoy *EnvoyConfig `json:"envoy,omitempty"`
 }
 
 type ProxyGroupStatus struct {
@@ -129,3 +140,79 @@ const (
 // +kubebuilder:validation:Type=string
 // +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9-]{0,61}$`
 type HostnamePrefix string
+
+// APIServerProxyMode is the mode to run the kube-apiserver proxy in.
+// +kubebuilder:validation:Enum=auth;noauth
+type APIServerProxyMode string
+
+const (
+	// APIServerProxyModeAuth is the auth mode for the kube-apiserver proxy.
+	APIServerProxyModeAuth APIServerProxyMode = "auth"
+	// APIServerProxyModeNoAuth is the noauth mode for the kube-apiserver proxy.
+	APIServerProxyModeNoAuth APIServerProxyMode = "noauth"
+)
+
+// KubeAPIServerConfig contains configuration specific to the kube-apiserver ProxyGroup type.
+type KubeAPIServerConfig struct {
+	// Mode to run the API server proxy in. Supported modes are auth and noauth.
+	// In auth mode, requests from the tailnet proxied over to the Kubernetes
+	// API server are additionally impersonated using the sender's tailnet identity.
+	// If not specified, defaults to auth mode.
+	// +optional
+	Mode *APIServerProxyMode `json:"mode,omitempty"`
+}
+
+// EnvoyConfig contains configuration specific to Envoy-based ProxyGroups.
+type EnvoyConfig struct {
+	// ConfigSource specifies how Envoy configuration is provided.
+	// Valid values are "static" (default) or "xds".
+	// +optional
+	// +kubebuilder:validation:Enum=static;xds
+	// +kubebuilder:default="static"
+	ConfigSource string `json:"configSource,omitempty"`
+
+	// XDSServer specifies the address of the xDS server when ConfigSource is "xds".
+	// This should be in the format "hostname:port".
+	// +optional
+	XDSServer string `json:"xdsServer,omitempty"`
+
+	// TLS contains TLS/HTTPS configuration for the Envoy proxy.
+	// +optional
+	TLS *EnvoyTLSConfig `json:"tls,omitempty"`
+
+	// Image specifies a custom Envoy image to use.
+	// If not specified, defaults to envoyproxy/envoy:v1.31-latest.
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// ExtraArgs are additional command-line arguments to pass to Envoy.
+	// +optional
+	ExtraArgs []string `json:"extraArgs,omitempty"`
+
+	// Resources defines the resource requirements for the Envoy container.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// EnvoyTLSConfig contains TLS configuration for Envoy.
+type EnvoyTLSConfig struct {
+	// Enabled determines whether HTTPS/TLS is enabled.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// CertSource specifies where TLS certificates come from.
+	// Valid values are "tailscale" (default) or "user".
+	// +optional
+	// +kubebuilder:validation:Enum=tailscale;user
+	// +kubebuilder:default="tailscale"
+	CertSource string `json:"certSource,omitempty"`
+
+	// CertSecretName is the name of the Secret containing TLS certificates when CertSource is "user".
+	// The Secret must contain "tls.crt" and "tls.key" keys.
+	// +optional
+	CertSecretName string `json:"certSecretName,omitempty"`
+
+	// HTTPSRedirect enables automatic HTTP to HTTPS redirects.
+	// +optional
+	HTTPSRedirect bool `json:"httpsRedirect,omitempty"`
+}

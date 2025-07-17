@@ -85,9 +85,13 @@ type ProxyGroupReconciler struct {
 	tsFirewallMode    string
 	defaultProxyClass string
 
-	mu                 sync.Mutex           // protects following
-	egressProxyGroups  set.Slice[types.UID] // for egress proxygroups gauge
-	ingressProxyGroups set.Slice[types.UID] // for ingress proxygroups gauge
+	mu                   sync.Mutex           // protects following
+	egressProxyGroups    set.Slice[types.UID] // for egress proxygroups gauge
+	ingressProxyGroups   set.Slice[types.UID] // for ingress proxygroups gauge
+	apiServerProxyGroups set.Slice[types.UID] // for kube-apiserver proxygroups gauge
+
+	// Envoy xDS server (only created if needed)
+	envoyXDSServer *XDSServer
 }
 
 func (r *ProxyGroupReconciler) logger(name string) *zap.SugaredLogger {
@@ -354,17 +358,40 @@ func (r *ProxyGroupReconciler) maybeProvision(ctx context.Context, pg *tsapi.Pro
 		}
 	}
 	if pg.Spec.Type == tsapi.ProxyGroupTypeIngress {
-		cm := pgIngressCM(pg, r.tsNamespace)
-		if _, err := createOrUpdate(ctx, r.Client, r.tsNamespace, cm, func(existing *corev1.ConfigMap) {
-			existing.ObjectMeta.Labels = cm.ObjectMeta.Labels
-			existing.ObjectMeta.OwnerReferences = cm.ObjectMeta.OwnerReferences
-		}); err != nil {
-			return false, fmt.Errorf("error provisioning ingress ConfigMap %q: %w", cm.Name, err)
+		// Check if this is an Envoy-based ingress ProxyGroup
+		if pg.Spec.Envoy != nil {
+			// Reconcile Envoy ConfigMap
+			if err := r.reconcileEnvoyConfigMap(ctx, pg); err != nil {
+				return false, fmt.Errorf("error reconciling Envoy ConfigMap: %w", err)
+			}
+		} else {
+			// Regular ingress ProxyGroup
+			cm := pgIngressCM(pg, r.tsNamespace)
+			if _, err := createOrUpdate(ctx, r.Client, r.tsNamespace, cm, func(existing *corev1.ConfigMap) {
+				existing.ObjectMeta.Labels = cm.ObjectMeta.Labels
+				existing.ObjectMeta.OwnerReferences = cm.ObjectMeta.OwnerReferences
+			}); err != nil {
+				return false, fmt.Errorf("error provisioning ingress ConfigMap %q: %w", cm.Name, err)
+			}
 		}
 	}
-	ss, err := pgStatefulSet(pg, r.tsNamespace, r.proxyImage, r.tsFirewallMode, tailscaledPort, proxyClass)
-	if err != nil {
-		return false, fmt.Errorf("error generating StatefulSet spec: %w", err)
+
+	var ss *appsv1.StatefulSet
+
+	// Check if this is an Envoy-based ProxyGroup
+	if pg.Spec.Envoy != nil && pg.Spec.Type == tsapi.ProxyGroupTypeIngress {
+		// Use Envoy StatefulSet
+		ss, err = envoyStatefulSet(pg, r.tsNamespace, r.proxyImage, r.tsFirewallMode, tailscaledPort, proxyClass)
+		if err != nil {
+			return false, fmt.Errorf("error generating Envoy StatefulSet spec: %w", err)
+		}
+	} else {
+		// Use regular StatefulSet
+		defaultImage := r.proxyImage
+		ss, err = pgStatefulSet(pg, r.tsNamespace, defaultImage, r.tsFirewallMode, tailscaledPort, proxyClass)
+		if err != nil {
+			return false, fmt.Errorf("error generating StatefulSet spec: %w", err)
+		}
 	}
 	cfg := &tailscaleSTSConfig{
 		proxyType: string(pg.Spec.Type),
