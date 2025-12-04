@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/acme/autocert"
 	"tailscale.com/derp/derphttp"
 	"tailscale.com/derp/derpserver"
 	"tailscale.com/net/netmon"
@@ -91,7 +92,7 @@ func TestCertIP(t *testing.T) {
 		t.Fatalf("Error closing key.pem: %v", err)
 	}
 
-	cp, err := certProviderByCertMode("manual", dir, hostname)
+	cp, err := certProviderByCertMode("manual", dir, hostname, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,4 +169,117 @@ func TestPinnedCertRawIP(t *testing.T) {
 		t.Fatalf("DialRegionTLS: %v", err)
 	}
 	defer connClose.Close()
+}
+
+// Test GCP mode requires EAB credentials
+func TestGCPModeRequiresEAB(t *testing.T) {
+	dir := t.TempDir()
+	hostname := "test.example.com"
+
+	// Test missing both EAB credentials
+	_, err := certProviderByCertMode("gcp", dir, hostname, "", "")
+	if err == nil {
+		t.Fatal("expected error when EAB credentials are missing")
+	}
+	if err.Error() != "GCP mode requires --gcp-eab-kid and --gcp-eab-key flags" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Test missing EAB key
+	_, err = certProviderByCertMode("gcp", dir, hostname, "test-kid", "")
+	if err == nil {
+		t.Fatal("expected error when EAB key is missing")
+	}
+
+	// Test missing EAB KID
+	_, err = certProviderByCertMode("gcp", dir, hostname, "", "dGVzdC1rZXk")
+	if err == nil {
+		t.Fatal("expected error when EAB KID is missing")
+	}
+
+	// Test invalid base64url encoding
+	_, err = certProviderByCertMode("gcp", dir, hostname, "test-kid", "not-valid-base64!")
+	if err == nil {
+		t.Fatal("expected error for invalid base64url encoding")
+	}
+}
+
+// Test GCP mode with valid EAB credentials (base64url format)
+func TestGCPModeWithValidEAB(t *testing.T) {
+	dir := t.TempDir()
+	hostname := "test.example.com"
+
+	// Valid base64url-encoded key (base64url("test-key"))
+	validKey := "dGVzdC1rZXk"
+
+	cp, err := certProviderByCertMode("gcp", dir, hostname, "test-kid", validKey)
+	if err != nil {
+		t.Fatalf("unexpected error with valid EAB credentials: %v", err)
+	}
+	if cp == nil {
+		t.Fatal("certProvider should not be nil")
+	}
+
+	// Verify it returns an autocert.Manager
+	manager, ok := cp.(*autocert.Manager)
+	if !ok {
+		t.Fatal("expected *autocert.Manager")
+	}
+
+	// Verify Client is set
+	if manager.Client == nil {
+		t.Fatal("Client should be set for GCP mode")
+	}
+
+	// Verify DirectoryURL
+	if manager.Client.DirectoryURL != "https://dv.acme-v02.api.pki.goog/directory" {
+		t.Fatalf("unexpected DirectoryURL: %s", manager.Client.DirectoryURL)
+	}
+
+	// Verify EAB is set
+	if manager.ExternalAccountBinding == nil {
+		t.Fatal("ExternalAccountBinding should be set for GCP mode")
+	}
+
+	if manager.ExternalAccountBinding.KID != "test-kid" {
+		t.Fatalf("unexpected EAB KID: %s", manager.ExternalAccountBinding.KID)
+	}
+
+	expectedKey := []byte("test-key")
+	if string(manager.ExternalAccountBinding.Key) != string(expectedKey) {
+		t.Fatalf("unexpected EAB Key: %v", manager.ExternalAccountBinding.Key)
+	}
+}
+
+// Test GCP mode with standard base64-encoded key (Terraform output format)
+func TestGCPModeWithBase64EAB(t *testing.T) {
+	dir := t.TempDir()
+	hostname := "test.example.com"
+
+	// Standard base64-encoded key with padding (base64("test-key"))
+	// This is the format that Terraform google_public_ca_external_account_key outputs
+	validKey := "dGVzdC1rZXk="
+
+	cp, err := certProviderByCertMode("gcp", dir, hostname, "test-kid", validKey)
+	if err != nil {
+		t.Fatalf("unexpected error with base64 EAB credentials: %v", err)
+	}
+	if cp == nil {
+		t.Fatal("certProvider should not be nil")
+	}
+
+	manager, ok := cp.(*autocert.Manager)
+	if !ok {
+		t.Fatal("expected *autocert.Manager")
+	}
+
+	if manager.ExternalAccountBinding == nil {
+		t.Fatal("ExternalAccountBinding should be set")
+	}
+
+	expectedKey := []byte("test-key")
+	if string(manager.ExternalAccountBinding.Key) != string(expectedKey) {
+		t.Fatalf("unexpected EAB Key: got %q, want %q",
+			string(manager.ExternalAccountBinding.Key), string(expectedKey))
+	}
 }

@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -43,7 +44,7 @@ type certProvider interface {
 	HTTPHandler(fallback http.Handler) http.Handler
 }
 
-func certProviderByCertMode(mode, dir, hostname string) (certProvider, error) {
+func certProviderByCertMode(mode, dir, hostname, eabKID, eabKey string) (certProvider, error) {
 	if dir == "" {
 		return nil, errors.New("missing required --certdir flag")
 	}
@@ -55,8 +56,27 @@ func certProviderByCertMode(mode, dir, hostname string) (certProvider, error) {
 			Cache:      autocert.DirCache(dir),
 		}
 		if mode == "gcp" {
+			if eabKID == "" || eabKey == "" {
+				return nil, errors.New("GCP mode requires --gcp-eab-kid and --gcp-eab-key flags")
+			}
+
+			// Decode EAB key - try base64url first, then standard base64
+			// (Terraform outputs standard base64, but ACME spec uses base64url)
+			keyBytes, err := base64.RawURLEncoding.DecodeString(eabKey)
+			if err != nil {
+				// Try standard base64 encoding
+				keyBytes, err = base64.StdEncoding.DecodeString(eabKey)
+				if err != nil {
+					return nil, fmt.Errorf("invalid EAB key format (must be base64 or base64url): %w", err)
+				}
+			}
+
 			certManager.Client = &upstreamacme.Client{
 				DirectoryURL: "https://dv.acme-v02.api.pki.goog/directory",
+			}
+			certManager.ExternalAccountBinding = &upstreamacme.ExternalAccountBinding{
+				KID: eabKID,
+				Key: keyBytes,
 			}
 		}
 		if hostname == "derp.tailscale.com" {

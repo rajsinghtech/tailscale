@@ -63,6 +63,8 @@ var (
 	certMode    = flag.String("certmode", "letsencrypt", "mode for getting a cert. possible options: manual, letsencrypt, gcp")
 	certDir     = flag.String("certdir", tsweb.DefaultCertDir("derper-certs"), "directory to store ACME (e.g. LetsEncrypt) certs, if addr's port is :443")
 	hostname    = flag.String("hostname", "derp.tailscale.com", "TLS host name for certs, if addr's port is :443. When --certmode=manual, this can be an IP address to avoid SNI checks")
+	gcpEABKid   = flag.String("gcp-eab-kid", "", "GCP External Account Binding (EAB) Key ID for ACME registration (required for --certmode=gcp)")
+	gcpEABKey   = flag.String("gcp-eab-key", "", "GCP External Account Binding (EAB) HMAC key in base64 or base64url format (required for --certmode=gcp)")
 	runSTUN     = flag.Bool("stun", true, "whether to run a STUN server. It will bind to the same IP (if any) as the --addr flag value.")
 	runDERP     = flag.Bool("derp", true, "whether to run a DERP server. The only reason to set this false is if you're decommissioning a server but want to keep its bootstrap DNS functionality still running.")
 	flagHome    = flag.String("home", "", "what to serve at the root path. It may be left empty (the default, for a default homepage), \"blank\" for a blank page, or a URL to redirect to")
@@ -343,7 +345,7 @@ func main() {
 	if serveTLS {
 		log.Printf("derper: serving on %s with TLS", *addr)
 		var certManager certProvider
-		certManager, err = certProviderByCertMode(*certMode, *certDir, *hostname)
+		certManager, err = certProviderByCertMode(*certMode, *certDir, *hostname, *gcpEABKid, *gcpEABKey)
 		if err != nil {
 			log.Fatalf("derper: can not start cert provider: %v", err)
 		}
